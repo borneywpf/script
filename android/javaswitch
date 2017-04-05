@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+PASSWORD=********
+
+function show_help() {
+  echo "使用方法:"
+  echo "$0 [java版本号(如7,8等)]"
+  exit 1
+}
+
+function switch_java() {
+    echo $PASSWORD  | sudo -S su 1>/dev/null 2>&1
+    
+    case "$1" in
+        "6")
+            echo 2 | sudo update-alternatives --config java > /dev/null
+            echo 3 | sudo update-alternatives --config javac > /dev/null
+             java_version
+		;;
+        "7")
+            echo 3 | sudo update-alternatives --config java > /dev/null
+            echo 4 | sudo update-alternatives --config javac > /dev/null
+            java_version
+			;;
+        "8")
+            echo 4 | sudo update-alternatives --config java > /dev/null
+            echo 5 | sudo update-alternatives --config javac > /dev/null
+            java_version
+		;;
+    esac
+    echo "不支持的版本号:$1"
+}
+
+function java_version() {
+    echo "-------java  version-------"
+    java -version
+    echo "-------javac version-------"
+    javac -version
+
+    exit 1
+}
+
+function main() {
+    if [ -n "$1" ];then
+        switch_java $*
+    else
+        show_help
+    fi
+}
+
+################Main########################
+main $*
+

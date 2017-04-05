@@ -1,0 +1,132 @@
+#!/usr/bin/env bash
+#@author borney
+#@date 10/10/2015
+
+IDEA="*.idea\/*|*.iml" #工程导入ide时产生的文件
+
+DEBUG=FALSE
+
+LOCAL_PATH=`pwd`
+
+function debug() {
+  if [ "$DEBUG" = TRUE ]; then
+    echo "$1"
+  fi
+}
+
+function show_help() {
+  echo "  -a  对所有文件进行操作"
+  echo "  -d  删除新添加的文件,默认删除ide新添加的文件(如.idea,*.iml等)之外的所有文件,配合-a删除所有新添加的文件"
+  echo "  -r  恢复修改了的文件到最新版本，配合-a恢复所有修改的文件"
+  echo "  -h  显示帮助信息"
+}
+
+function show_error() {
+  echo "--------------error message--------------"
+  echo "error:$1"
+  echo "-----------------------------------------"
+  echo "声明: 该脚本用于删除git项目中新添加的文件,以及恢复git项目修改文件到代码最新版本"
+  echo "用法: 在git项目目录下运行, $0 要删除新文件的目录(默认是当前目录) 参数"
+  echo "例如: $0 code/src/ -a -r"
+  echo "详细用法：可用 -h 查看"
+}
+
+function args_verify() {
+  if [ -n "$1" ];then
+    if [ -d ".git" ]; then
+      local find_args=0
+      local i=0
+      for file in "$@"
+      do  
+        is_del_file=($(git status | grep $file))
+        if [ -f "$file" ] || [ -d "$file" ] || [ -n "$is_del_file" ];then
+          arg=$file
+          files[i]=${arg/%\//}
+          let i+=1
+        else
+          case "$file" in
+            "-h" | "-help")
+              show_help
+              let find_args+=1
+              echo "发现操作项-h"
+              ;;
+            "-a")
+              ALL_FILE=TRUE
+              export ALL_FILE
+              let find_args+=1
+              echo "发现操作项-a"
+              ;;
+            "-d")
+              DELE_FILE=TRUE
+              export DELE_FILE
+              let find_args+=1
+              echo "发现操作项-d"
+              ;;
+            "-r")
+              REVERT_FILE=TRUE
+              export REVERT_FILE
+              let find_args+=1
+              echo "发现操作项-r"
+              ;;
+          esac
+        fi
+      done
+      if [ 0 -eq "$find_args" ]; then
+        echo "没有发现操作项"
+      fi
+    else
+      show_error "没有在git项目的根目录(包含.git文件的目录)下运行"
+    fi
+  else
+    show_error "没有指定要操作的目录或文件"
+  fi
+}
+
+function git_delete_new_file() {
+  is_idea=$(echo $1 | grep -v -E $IDEA)
+  if [ -d "$1" ]; then
+    if [ -n "$is_idea" ]; then
+      for file in `ls $1`
+      do
+        git_delete_new_file $1/$file
+      done
+    fi
+  else
+    if [ -n "$is_idea" ]; then
+      git clean -df $1
+    fi
+  fi
+}
+
+function git_delete_new_files() {
+  if [ "$DELE_FILE" = TRUE ]; then
+    if [ "$ALL_FILE" = TRUE ]; then
+      git clean -df $LOCAL_PATH
+    else
+      for del_file in ${files[@]}
+      do
+        git_delete_new_file $del_file
+      done
+    fi
+  fi
+}
+
+function git_revert_files() {
+  if [ "$REVERT_FILE" = TRUE ]; then
+    if [ "$ALL_FILE" = TRUE ]; then
+      echo "git revert file $LOCAL_PATH"
+      git checkout HEAD $LOCAL_PATH
+    else
+      for revert_file in ${files[@]}
+      do
+        echo "git revert file $revert_file"
+        git checkout HEAD $revert_file
+      done
+    fi
+  fi
+}
+
+##################### Main Loop ############################
+args_verify $*         #参数校验
+git_delete_new_files   #删除新文件方法
+git_revert_files       #恢复修改文件的方法

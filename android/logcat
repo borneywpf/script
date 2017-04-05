@@ -1,0 +1,156 @@
+#!/bin/bash
+DEBUG=TRUE #debug tag
+
+function debug() {
+  if [ "$DEBUG" = "TRUE" ];then
+    echo $1
+  fi
+}
+
+function show_help() {
+  echo "    -t    $0 -t tags 例如: $0 -t \"Log|xxx\""
+  echo "    -v    $0 -v 过滤掉无用的日志 例如: $0 -v \"Log|xxx\""
+  echo "    -p    $0 -p 通过进程Id过滤日志 例如: $0 -p processName"
+  echo "    -b    $0 -b 抓取events日志"
+  echo "    -s    $0 -s 日志类型(I|W|D|E|V|F)"
+  exit 1
+}
+
+function show_error() {
+  echo "--------------ERROR MESSAGE--------------"
+  echo "ERROR:$1"
+  echo "-----------------------------------------"
+  echo "声明: 该脚本根据进程Id抓取日志，可以设置tag，过滤掉不需要的日志，以及抓取events日志等"
+  echo "用法: "
+  echo "例如: $0 -t \"XXX|YYY\" -v \"MMM|NNN\" -p \"com.android.update\""
+  echo "详细用法：可用 -h 查看"
+  exit 1
+}
+
+function args_verify() {
+  if [ -n "$1" ] && [ "$1" = "-h" ]; then
+    show_help
+  fi
+
+  while [ $# -gt 0 ];do 
+    case "$1" in
+      #show help
+      "-h" | "-help")
+      show_help
+      debug "发现操作项-h"
+      ;;
+      #通过tag过滤
+      "-t")
+      OP_T=TRUE
+      export OP_T
+      debug "发现操作项-t"
+      shift 1
+      OP_T_ARGS=(`echo $1 | grep "^-[a-z]"`)
+      export OP_T_ARGS
+      if [ -z "$1" ] || [ -n "$OP_T_ARGS" ]; then
+        show_error "-t 操作的参数为空"
+      else
+        OP_T_ARGS=$1
+      fi
+      debug "-t参数为$OP_T_ARGS"
+      ;;
+      #-s
+      "-s")
+      OP_S=TRUE
+      export OP_S
+      debug "发现操作项-s"
+      shift 1
+      OP_S_ARGS=(`echo $1 | egrep "[I|W|D|E|V|F]"`)
+      export OP_S_ARGS
+      if [ -z "$OP_S_ARGS" ]; then
+        show_error "-s 操作的参数为空"
+      fi
+      debug "-s参数为$OP_S_ARGS"
+      ;;
+      
+      "-p")
+      OP_P=TRUE
+      export OP_P
+      debug "发现操作项-p"
+      shift 1
+      OP_P_ARGS=(`echo $1 | grep "^-[a-z]"`)
+      export OP_P_ARGS
+      if [ -z "$1" ] || [ -n "$OP_P_ARGS" ]; then
+        show_error "-p 操作的参数为空"
+      else
+        process=$1
+      fi
+      processId=(`adb shell ps | grep $process | awk '{print $2}'`)
+      if [ -z "$processId" ]; then
+        show_error "没有找到$process对应的进程号，请重新输入进程号"
+      fi
+      debug process=$process processId=$processId
+      ;;
+      
+      "-b")
+      OP_B=TRUE
+      export OP_B
+      debug "发现操作项-b"
+      ;;
+      
+      "-v")
+      OP_V=TRUE
+      export OP_V
+      debug "发现操作项-v"
+      shift 1
+      OP_V_ARGS=(`echo $1 | grep "^-[a-z]"`)
+      export OP_V_ARGS
+      if [ -z "$1" ] || [ -n "$OP_V_ARGS" ]; then
+        show_error "-v 操作的参数为空"
+      else
+        OP_V_ARGS=$1
+      fi
+      debug "-v参数为$OP_V_ARGS"
+    esac
+    shift 1
+  done
+}
+
+function exe_logcat() {
+  adb_cmd="adb logcat -v threadtime"
+
+  adb_b_cmd=" -b events"
+
+  adb_s_cmd=" -s *:$OP_S_ARGS"
+
+  g_t_cmd=" | egrep --color \"$OP_T_ARGS\""
+
+  g_v_cmd=" | egrep -v \"$OP_V_ARGS\""
+
+  cmd=${adb_cmd}
+
+  if [ "$OP_B" = "TRUE" ]; then   #events日志
+    cmd=${cmd}${adb_b_cmd}
+  elif [ "$OP_S" = "TRUE" ]; then  #日志类型过滤
+    cmd=${cmd}${adb_s_cmd}
+  fi
+  
+  if [ "$OP_P" = "TRUE" ]; then  #进程号过滤
+    if [ -n "$processId" ]; then
+          g_p_cmd=" | grep --color \"$processId\""
+      cmd=${cmd}${g_p_cmd}
+    else
+      show_error "没有输入进程的包名"
+    fi
+  fi
+  if [ "$OP_T" = "TRUE" ] && [ -n "$OP_T_ARGS" ]; then  #tag过滤
+    cmd=${cmd}${g_t_cmd}
+  fi
+  if [ "$OP_V" = "TRUE" ] && [ -n "$OP_V_ARGS" ]; then  #v过滤
+    cmd=${cmd}${g_v_cmd} 
+  fi
+  
+  debug "cmd=$cmd"
+  
+  eval "$cmd" #执行命令
+}
+
+
+################Main########################
+args_verify $*  #参数校验
+exe_logcat  #构造adb命令并执行

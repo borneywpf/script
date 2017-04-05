@@ -1,0 +1,15 @@
+#!/bin/bash
+
+############
+if [ -z "$1" ]; then
+	echo "参数为空"
+else
+	echo $1
+fi
+
+pids=(`ps aux | grep $1 | awk '{print $2}'`)
+len=${#pids[*]}
+for ((i=0; i<$len; i++)); do
+	pid=${pids[$i]}
+	kill -9 $pid
+done
