@@ -1,5 +1,5 @@
 #!/bin/bash
-DEBUG=TRUE #debug tag
+DEBUG=FALSE #debug tag
 
 function debug() {
   if [ "$DEBUG" = "TRUE" ];then
@@ -8,15 +8,17 @@ function debug() {
 }
 
 function show_help() {
-  echo "    -t    $0 -t tags 例如: $0 -t \"Log|xxx\""
-  echo "    -v    $0 -v 过滤掉无用的日志 例如: $0 -v \"Log|xxx\""
-  echo "    -p    $0 -p 通过进程Id过滤日志 例如: $0 -p processName"
-  echo "    -b    $0 -b 抓取events日志"
-  echo "    -s    $0 -s 日志类型(I|W|D|E|V|F)"
+  echo "    logcat [option] [arguments]"
+  echo "    -t (TAG1|TAG2|...) 通过grep方式过滤tag 例如: logcat -t \"Log|xxx\""
+  echo "    -v (TAG1|TAG2|...) 过滤掉无用的tag日志 例如: logcat -v \"Log|xxx\""
+  echo "    -p (packageName)   通过进程Id过滤日志 例如: logcat -p processName"
+  echo "    -b (buffer)        抓取events等日志"
+  echo "    -s (TAG1|TAG2|...) 通过adb -s 命令过滤tag"
   exit 1
 }
 
-function show_error() {
+function show_error()
+{
   echo "--------------ERROR MESSAGE--------------"
   echo "ERROR:$1"
   echo "-----------------------------------------"
@@ -27,98 +29,156 @@ function show_error() {
   exit 1
 }
 
-function args_verify() {
+function checkInt()
+{
+  expr $1 "+" 10 &> /dev/null
+  if [ $? -ne 0 ]; then
+    show_error "Args must be integer!"
+  fi
+}
+
+function devices_choice()
+{
+  devices=(`adb devices | egrep -v "devices"`)
+  array=()
+  for d in ${devices[@]};
+  do
+    if [ $d != "device" ]; then
+      array+=($d)
+    fi
+  done
+  arraylength=${#array[@]}
+  if [ $arraylength -eq 0 ]; then
+    show_error "没有可以调试的手机!!!"
+    exit 1
+  elif [ $arraylength -eq 1 ]; then
+    DEVICE=${array[0]}
+  else
+    echo "选择要调试的手机:"
+    for ((i=0; i<arraylength; i++));
+    do
+      echo $i : ${array[$i]}
+    done
+    read -p "Input Number:"
+    checkInt $REPLY
+    if [ $REPLY -lt 0 -o $REPLY -ge $arraylength ]; then
+      show_error "Index outof bounds!!!"
+    fi
+    DEVICE=${array[$REPLY]}
+  fi
+  export DEVICE
+}
+
+function args_verify()
+{
   if [ -n "$1" ] && [ "$1" = "-h" ]; then
     show_help
   fi
+  
+  if [ -z $DEVICE ]; then
+    show_error "没有可以调试的机器"
+  fi
 
-  while [ $# -gt 0 ];do 
+  while [ $# -gt 0 ];do
     case "$1" in
       #show help
       "-h" | "-help")
-      show_help
-      debug "发现操作项-h"
+        show_help
+        debug "发现操作项-h"
       ;;
       #通过tag过滤
       "-t")
-      OP_T=TRUE
-      export OP_T
-      debug "发现操作项-t"
-      shift 1
-      OP_T_ARGS=(`echo $1 | grep "^-[a-z]"`)
-      export OP_T_ARGS
-      if [ -z "$1" ] || [ -n "$OP_T_ARGS" ]; then
-        show_error "-t 操作的参数为空"
-      else
-        OP_T_ARGS=$1
-      fi
-      debug "-t参数为$OP_T_ARGS"
+        OP_T=TRUE
+        export OP_T
+        debug "发现操作项-t"
+        shift 1
+        OP_T_ARGS=(`echo $1 | grep "^-[a-z]"`)
+        export OP_T_ARGS
+        if [ -z "$1" ] || [ -n "$OP_T_ARGS" ]; then
+          show_error "-t 操作的参数为空"
+        else
+          OP_T_ARGS=$1
+        fi
+        debug "-t参数为$OP_T_ARGS"
       ;;
       #-s
       "-s")
-      OP_S=TRUE
-      export OP_S
-      debug "发现操作项-s"
-      shift 1
-      OP_S_ARGS=(`echo $1 | egrep "[I|W|D|E|V|F]"`)
-      export OP_S_ARGS
-      if [ -z "$OP_S_ARGS" ]; then
-        show_error "-s 操作的参数为空"
-      fi
-      debug "-s参数为$OP_S_ARGS"
+        OP_S=TRUE
+        export OP_S
+        debug "发现操作项-s"
+        shift 1
+        tags=(`echo $1 | grep "^-[a-z]"`)
+        if [ -z "$1" ] || [ -n "$tags" ]; then
+          show_error "-s 操作的参数为空"
+        else
+          IFS='|' read -r -a array <<< "$1"
+          OP_S_ARGS=${array[@]}
+          export OP_S_ARGS
+        fi
+        debug "-s参数为$OP_S_ARGS"
       ;;
       
       "-p")
-      OP_P=TRUE
-      export OP_P
-      debug "发现操作项-p"
-      shift 1
-      OP_P_ARGS=(`echo $1 | grep "^-[a-z]"`)
-      export OP_P_ARGS
-      if [ -z "$1" ] || [ -n "$OP_P_ARGS" ]; then
-        show_error "-p 操作的参数为空"
-      else
-        process=$1
-      fi
-      processId=(`adb shell ps | grep $process | awk '{print $2}'`)
-      if [ -z "$processId" ]; then
-        show_error "没有找到$process对应的进程号，请重新输入进程号"
-      fi
-      debug process=$process processId=$processId
+        OP_P=TRUE
+        export OP_P
+        debug "发现操作项-p"
+        shift 1
+        OP_P_ARGS=(`echo $1 | grep "^-[a-z]"`)
+        export OP_P_ARGS
+        if [ -z "$1" ] || [ -n "$OP_P_ARGS" ]; then
+          show_error "-p 操作的参数为空"
+        else
+          proce ss=$1
+        fi
+        processId=(`adb shell ps | grep $process | awk '{print $2}'`)
+        if [ -z "$processId" ]; then
+          show_error "没有找到$process对应的进程号，请重新输入进程号"
+        fi
+        debug process=$process processId=$processId
       ;;
       
       "-b")
-      OP_B=TRUE
-      export OP_B
-      debug "发现操作项-b"
+        OP_B=TRUE
+        export OP_B
+        debug "发现操作项-b"
+        shift 1
+        OP_B_ARGS=(`echo $1 | grep "^-[a-z]"`)
+        export OP_B_ARGS
+        if [ -z "$1" ] || [ -n "$OP_B_ARGS" ]; then
+          show_error "-t 操作的参数为空"
+        else
+          OP_B_ARGS=$1
+        fi
+        debug "-b参数为$OP_B_ARGS"
       ;;
       
       "-v")
-      OP_V=TRUE
-      export OP_V
-      debug "发现操作项-v"
-      shift 1
-      OP_V_ARGS=(`echo $1 | grep "^-[a-z]"`)
-      export OP_V_ARGS
-      if [ -z "$1" ] || [ -n "$OP_V_ARGS" ]; then
-        show_error "-v 操作的参数为空"
-      else
-        OP_V_ARGS=$1
-      fi
-      debug "-v参数为$OP_V_ARGS"
+        OP_V=TRUE
+        export OP_V
+        debug "发现操作项-v"
+        shift 1
+        OP_V_ARGS=(`echo $1 | grep "^-[a-z]"`)
+        export OP_V_ARGS
+        if [ -z "$1" ] || [ -n "$OP_V_ARGS" ]; then
+          show_error "-v 操作的参数为空"
+        else
+          OP_V_ARGS=$1
+        fi
+        debug "-v参数为$OP_V_ARGS"
     esac
     shift 1
   done
 }
 
-function exe_logcat() {
-  adb_cmd="adb logcat -v threadtime"
+function exe_logcat()
+{
+  adb_cmd="adb -s $DEVICE logcat -v color -v brief"
 
-  adb_b_cmd=" -b events"
+  adb_b_cmd=" -b $OP_B_ARGS"
 
-  adb_s_cmd=" -s *:$OP_S_ARGS"
+  adb_s_cmd=" -s $OP_S_ARGS"
 
-  g_t_cmd=" | egrep --color \"$OP_T_ARGS\""
+  g_t_cmd=" | egrep \"$OP_T_ARGS\""
 
   g_v_cmd=" | egrep -v \"$OP_V_ARGS\""
 
@@ -152,5 +212,6 @@ function exe_logcat() {
 
 
 ################Main########################
+devices_choice
 args_verify $*  #参数校验
 exe_logcat  #构造adb命令并执行
