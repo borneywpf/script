@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+
+function help()
+{
+  echo "名称:adbshellpull"
+  echo "概述:android调试过程中，user版本的手机应用数据因为权限的限制无法通过adb shell pull到本地，该脚步的作用就是在user版本的手机中，pull出应用的数据"
+  echo "用法:adbshellpull <应用包名> <本地路径>"
+  echo "例如:adbshellpull com.gionee.bbs /home/borney/tmp 就会将com.gione.bbs data/data中的数据pull到本地/home/borney/tmp目录"
+  exit 1
+}
+
+function args_verify()
+{
+  if [ -z $1 ] || [ -z $2 ]; then
+    help
+  fi
+}
+
+function devices_choice()
+{
+  devices=(`adb devices | egrep -v "devices"`)
+  array=()
+  for d in ${devices[@]};
+  do
+    if [ $d != "device" ]; then
+      array+=($d)
+    fi
+  done
+  arraylength=${#array[@]}
+  if [ $arraylength -eq 0 ]; then
+    show_error "没有可以调试的手机!!!"
+    exit 1
+  elif [ $arraylength -eq 1 ]; then
+    DEVICE=${array[0]}
+  else
+    echo "选择要调试的手机:"
+    for ((i=0; i<arraylength; i++));
+    do
+      echo $i : ${array[$i]}
+    done
+    read -p "Input Number:"
+    checkInt $REPLY
+    if [ $REPLY -lt 0 -o $REPLY -ge $arraylength ]; then
+      show_error "Index outof bounds!!!"
+    fi
+    DEVICE=${array[$REPLY]}
+  fi
+  export DEVICE
+}
+
+function runas()
+{
+  localdir=$(readlink -f $2)
+  adb -s $DEVICE shell run-as $1 cp -r /data/data/$1 /storage/sdcard0 > /dev/null 2>&1
+  adb -s $DEVICE pull /storage/sdcard0/$1 $localdir
+  adb -s $DEVICE shell rm -r /storage/sdcard0/$1
+}
+
+################Main########################
+devices_choice
+args_verify $*
+runas $*
