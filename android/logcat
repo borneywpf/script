@@ -168,7 +168,7 @@ function args_verify()
 
 function exe_logcat()
 {
-  adb_cmd="adb -s $DEVICE logcat -v brief -v color"
+  adb_cmd="adb -s $DEVICE logcat -v color"
 
   adb_b_cmd=" -b $OP_B_ARGS"
 
@@ -190,9 +190,9 @@ function exe_logcat()
     while true; do
       packageName=(`adb -s $DEVICE shell ps | grep $process | awk '{print $9}'`)
       if [ -n "$packageName" ]; then
-        processId=(`adb -s $DEVICE shell pidof -s $packageName`)
+        processId=(`adb -s $DEVICE shell ps | grep $packageName | awk '{print $2}'`)
         debug packageName=$packageName processId=$processId
-        g_p_cmd=" --pid=\"$processId\""
+        g_p_cmd=" | grep \" $processId \""
         cmd=${cmd}${g_p_cmd}
         break
       fi
